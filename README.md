@@ -12,19 +12,70 @@ A tool inspired by `kubectx` for managing and switching between SSH connections 
 - ✨ Colored output for current connection
 - 💡 Easy connection management (add/remove/edit)
 
+## Requirements
+
+### Required Dependencies
+- **Bash** - For the main script execution (usually pre-installed on Linux/macOS)
+- **SSH client** - For establishing SSH connections (usually pre-installed)
+- **Git** - To clone the repository
+
+### Optional Dependencies (Highly Recommended)
+- **fzf** - Enables interactive connection selection mode
+- **Zsh** - Provides advanced tab completion support
+
+### Installing Optional Dependencies
+
+#### fzf (Interactive Mode)
+```bash
+# macOS
+brew install fzf
+
+# Ubuntu/Debian  
+sudo apt install fzf
+
+# Or install via git
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install
+```
+
+#### Zsh (Enhanced Tab Completion)
+```bash
+# macOS (usually pre-installed)
+brew install zsh
+
+# Ubuntu/Debian
+sudo apt install zsh
+
+# Set as default shell (optional)
+chsh -s $(which zsh)
+```
+
 ## Installation
 
-### Quick Install
+### Quick Install (Recommended)
 
-1. Clone this repository:
+1. **Install requirements first** (see [Requirements](#requirements) section above for details):
    ```bash
-   git clone <repository-url>
+   # Install fzf for interactive mode (recommended)
+   brew install fzf  # macOS
+   # or
+   sudo apt install fzf  # Ubuntu/Debian
+   ```
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/netashiloh/sshx.git
    cd sshx
    ```
 
-2. Run the install script:
+3. **Run the install script**:
    ```bash
    ./install.sh
+   ```
+
+4. **Restart your terminal** or run:
+   ```bash
+   source ~/.zshrc
    ```
 
 ### Manual Installation
@@ -97,11 +148,7 @@ sshx --help
 
 **With fzf installed**: Shows an interactive fuzzy-search menu
 ```bash
-# Install fzf to enable interactive mode
-brew install fzf  # macOS
-sudo apt install fzf  # Ubuntu/Debian
-
-# Then use interactive mode
+# After installing fzf, use interactive mode
 sshx
 ```
 
@@ -112,6 +159,8 @@ sshx
 # Same as running:
 sshx --list
 ```
+
+> 💡 **Tip**: Install `fzf` for the best experience! The interactive mode makes switching between connections much faster and more intuitive.
 
 ## Configuration
 
@@ -166,43 +215,6 @@ sshx --remove old-server
 
 # Edit config file directly
 sshx --edit
-```
-
-## Requirements
-
-### Required
-- **Bash** - For the main script execution
-- **SSH client** - For establishing SSH connections
-
-### Optional (Enhances Experience)
-- **fzf** - Enables interactive connection selection mode (without it, `sshx` will list connections instead)
-- **Zsh** - Provides advanced tab completion support (works with bash too, but completion is better with zsh)
-
-### Installation of Optional Dependencies
-
-#### fzf (Interactive Mode)
-```bash
-# macOS
-brew install fzf
-
-# Ubuntu/Debian
-sudo apt install fzf
-
-# Or install via git
-git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-~/.fzf/install
-```
-
-#### Zsh (Tab Completion)
-```bash
-# macOS (usually pre-installed)
-brew install zsh
-
-# Ubuntu/Debian
-sudo apt install zsh
-
-# Set as default shell
-chsh -s $(which zsh)
 ```
 
 ## Troubleshooting
