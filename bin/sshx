@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+#
+# sshx(1) is a utility to manage and switch between SSH connections.
+# Inspired by kubectx by Ahmet Alp Balkan
+
+[[ -n $DEBUG ]] && set -x
+
+set -eou pipefail
+IFS=$'\n\t'
+
+SELF_CMD="$0"
+SSHX_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sshx"
+SSHX_CONFIG="${SSHX_DIR}/config"
+SSHX_CURRENT="${SSHX_DIR}/current"
+
+usage() {
+  local SELF
+  SELF="sshx"
+
+  cat <<EOF
+USAGE:
+  $SELF                       : list the SSH connections
+  $SELF <alias>               : connect to SSH connection by alias
+  $SELF -l, --list            : list all connections
+  $SELF -a, --add <alias> <connection> : add a new SSH connection
+  $SELF -r, --remove <alias>  : remove an SSH connection
+  $SELF -e, --edit            : edit the configuration file
+  $SELF -c, --current         : show the current connection
+  $SELF -                     : connect to the previous connection
+  $SELF -h, --help            : show this message
+
+EXAMPLES:
+  $SELF -a server1 "ssh -i ~/.ssh/my-key.pem user@example.com"
+  $SELF -a server2 "ssh -i ~/.ssh/my-key.pem user@another-host.com"
+  $SELF server1               # Connect to server1
+  $SELF -                     # Connect to previous connection
+
+CONNECTION FORMAT:
+  Each line in the config file should be: alias:ssh_command
+  Example: server1:ssh -i ~/.ssh/my-key.pem user@example.com
+EOF
+}
+
+exit_err() {
+   echo >&2 "${1}"
+   exit 1
+}
+
+ensure_config_dir() {
+  [[ -d "${SSHX_DIR}" ]] || mkdir -p "${SSHX_DIR}"
+}
+
+get_connections() {
+  if [[ -f "${SSHX_CONFIG}" ]]; then
+    grep -v '^#' "${SSHX_CONFIG}" | grep -v '^$' | sort
+  fi
+}
+
+get_aliases() {
+  get_connections | cut -d: -f1
+}
+
+get_connection_command() {
+  local alias="${1}"
+  get_connections | grep "^${alias}:" | cut -d: -f2-
+}
+
+list_connections() {
+  local connections cur_alias
+  connections="$(get_connections)"
+  cur_alias="$(current_connection 2>/dev/null || echo "")"
+
+  if [[ -z "${connections}" ]]; then
+    echo "No SSH connections configured. Use 'sshx --add' to add one."
+    return
+  fi
+
+  local yellow darkbg normal
+  yellow=$(tput setaf 3 || true)
+  darkbg=$(tput setab 0 || true)
+  normal=$(tput sgr0 || true)
+
+  local cur_ctx_fg cur_ctx_bg
+  cur_ctx_fg=${SSHX_CURRENT_FGCOLOR:-$yellow}
+  cur_ctx_bg=${SSHX_CURRENT_BGCOLOR:-$darkbg}
+
+  while IFS=: read -r alias command; do
+    if [[ -n "${_SSHX_FORCE_COLOR:-}" || (-t 1 && -z "${NO_COLOR:-}") ]]; then
+      # colored output mode
+      if [[ "${alias}" == "${cur_alias}" ]]; then
+        echo "${cur_ctx_bg}${cur_ctx_fg}${alias}${normal}"
+      else
+        echo "${alias}"
+      fi
+    else
+      echo "${alias}"
+    fi
+  done <<< "${connections}"
+}
+
+current_connection() {
+  if [[ -f "${SSHX_CURRENT}" ]]; then
+    cat "${SSHX_CURRENT}"
+  else
+    return 1
+  fi
+}
+
+save_current() {
+  ensure_config_dir
+  printf '%s' "${1}" > "${SSHX_CURRENT}"
+}
+
+read_previous() {
+  if [[ -f "${SSHX_DIR}/previous" ]]; then
+    cat "${SSHX_DIR}/previous"
+  fi
+}
+
+save_previous() {
+  ensure_config_dir
+  printf '%s' "${1}" > "${SSHX_DIR}/previous"
+}
+
+connection_exists() {
+  get_aliases | grep -q "^${1}$"
+}
+
+add_connection() {
+  local alias="${1}"
+  local command="${2}"
+  
+  ensure_config_dir
+  
+  if connection_exists "${alias}"; then
+    echo "Connection '${alias}' already exists. Use --remove first to replace it."
+    exit 1
+  fi
+  
+  echo "${alias}:${command}" >> "${SSHX_CONFIG}"
+  echo "Added connection: ${alias}"
+}
+
+remove_connection() {
+  local alias="${1}"
+  
+  if ! connection_exists "${alias}"; then
+    exit_err "Connection '${alias}' not found"
+  fi
+  
+  # Create a temporary file and filter out the connection
+  local temp_file
+  temp_file="$(mktemp)"
+  get_connections | grep -v "^${alias}:" > "${temp_file}"
+  mv "${temp_file}" "${SSHX_CONFIG}"
+  
+  echo "Removed connection: ${alias}"
+  
+  # Clear current if it was the removed connection
+  if [[ "$(current_connection 2>/dev/null || true)" == "${alias}" ]]; then
+    rm -f "${SSHX_CURRENT}"
+  fi
+}
+
+connect_to() {
+  local alias="${1}"
+  local command
+  
+  if ! connection_exists "${alias}"; then
+    exit_err "Connection '${alias}' not found"
+  fi
+  
+  command="$(get_connection_command "${alias}")"
+  
+  # Save previous connection
+  local prev
+  prev="$(current_connection 2>/dev/null || true)"
+  if [[ -n "${prev}" && "${prev}" != "${alias}" ]]; then
+    save_previous "${prev}"
+  fi
+  
+  # Save current connection
+  save_current "${alias}"
+  
+  echo "Connecting to ${alias}..."
+  exec bash -c "${command}"
+}
+
+connect_to_previous() {
+  local prev
+  prev="$(read_previous)"
+  
+  if [[ -z "${prev}" ]]; then
+    exit_err "No previous connection found"
+  fi
+  
+  connect_to "${prev}"
+}
+
+choose_connection_interactive() {
+  # Check if fzf is available
+  if ! command -v fzf &> /dev/null; then
+    exit_err "fzf is required for interactive mode. Install it or use specific connection alias."
+  fi
+  
+  local connections choice
+  connections="$(get_aliases)"
+  
+  if [[ -z "${connections}" ]]; then
+    echo "No SSH connections configured. Use 'sshx --add' to add one."
+    return
+  fi
+  
+  choice="$(echo "${connections}" | \
+    fzf --ansi --no-preview --prompt='SSH Connection> ' || true)"
+    
+  if [[ -z "${choice}" ]]; then
+    echo >&2 "error: you did not choose any of the options"
+    exit 1
+  else
+    connect_to "${choice}"
+  fi
+}
+
+edit_config() {
+  ensure_config_dir
+  
+  # Create config file with examples if it doesn't exist
+  if [[ ! -f "${SSHX_CONFIG}" ]]; then
+    cat > "${SSHX_CONFIG}" << 'EOF'
+# SSH Connections Configuration
+# Format: alias:ssh_command
+# Examples:
+# server1:ssh -i ~/.ssh/my-key.pem user@example.com
+# server2:ssh -i ~/.ssh/my-key.pem user@another-host.com
+# local-dev:ssh -i ~/.ssh/my-key.pem ubuntu@192.168.1.100
+
+EOF
+  fi
+  
+  "${EDITOR:-vi}" "${SSHX_CONFIG}"
+}
+
+main() {
+  if [[ "$#" -eq 0 ]]; then
+    # No arguments - try interactive mode or list
+    if [[ -t 1 && -z "${SSHX_IGNORE_FZF:-}" ]] && command -v fzf &> /dev/null; then
+      choose_connection_interactive
+    else
+      list_connections
+    fi
+  elif [[ "$#" -eq 1 ]]; then
+    case "${1}" in
+      "-h"|"--help")
+        usage
+        ;;
+      "-l"|"--list")
+        list_connections
+        ;;
+      "-e"|"--edit")
+        edit_config
+        ;;
+      "-c"|"--current")
+        current_connection || echo "No current connection set"
+        ;;
+      "-")
+        connect_to_previous
+        ;;
+      "-"*)
+        echo "error: unrecognized flag '${1}'" >&2
+        usage
+        exit 1
+        ;;
+      *)
+        # Connection alias
+        connect_to "${1}"
+        ;;
+    esac
+  elif [[ "$#" -eq 2 ]]; then
+    case "${1}" in
+      "-r"|"--remove")
+        remove_connection "${2}"
+        ;;
+      *)
+        echo "error: unrecognized command" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  elif [[ "$#" -eq 3 ]]; then
+    case "${1}" in
+      "-a"|"--add")
+        add_connection "${2}" "${3}"
+        ;;
+      *)
+        echo "error: unrecognized command" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  else
+    echo "error: too many arguments" >&2
+    usage
+    exit 1
+  fi
+}
+
+main "$@"

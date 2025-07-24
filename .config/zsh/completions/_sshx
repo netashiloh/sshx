@@ -1,0 +1,27 @@
+#compdef sshx
+
+_sshx_get_aliases() {
+  local config_file="${XDG_CONFIG_HOME:-$HOME/.config}/sshx/config"
+  if [[ -f "$config_file" ]]; then
+    grep -v '^#' "$config_file" | grep -v '^$' | cut -d: -f1
+  fi
+}
+
+_sshx() {
+  local context state line
+  typeset -A opt_args
+
+  _arguments \
+    '(- : *)'{-h,--help}'[show help message]' \
+    '(- : *)'{-l,--list}'[list all connections]' \
+    '(- : *)'{-e,--edit}'[edit configuration file]' \
+    '(- : *)'{-c,--current}'[show current connection]' \
+    '(-a --add)'{-a,--add}'[add new connection]:alias:_guard "^-*" "alias":command:_guard "^-*" "ssh command"' \
+    '(-r --remove)'{-r,--remove}'[remove connection]:alias:($(_sshx_get_aliases))' \
+    '(- : *)'-'[connect to previous connection]' \
+    '1: :($(_sshx_get_aliases) -)'
+
+  return 0
+}
+
+_sshx "$@"

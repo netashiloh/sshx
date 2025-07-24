@@ -1,0 +1,22 @@
+# User-specific configuration files (these should not be committed)
+.config/sshx/current
+.config/sshx/previous
+
+# macOS
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# IDE
+.vscode/
+.idea/

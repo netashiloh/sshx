@@ -1,0 +1,16 @@
+# SSH Connections Configuration
+# Format: alias:ssh_command
+# Replace <key-path> with your actual SSH key path
+# Replace user@host with your actual username and host/IP
+
+# Example connections (replace with your own)
+# server1:ssh -i <key-path> user@host1
+# server2:ssh -i <key-path> user@host2
+# dev-server:ssh -i <key-path> user@host3
+
+# You can also use simple SSH connections without keys
+# local-server:ssh user@localhost
+# staging:ssh deploy@staging.example.com
+
+# Or connections with custom ports
+# vpn-server:ssh -p 2222 -i <key-path> user@host4
